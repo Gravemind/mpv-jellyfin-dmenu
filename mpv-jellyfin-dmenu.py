@@ -429,9 +429,11 @@ def dmenu_ask(prompt, stdin):
     ) as proc:
         if stdin:
             proc.stdin.write(stdin)
+            proc.stdin.close()
+        stdout = proc.stdout.read().strip()
     if proc.returncode != 0:
         return None
-    return proc.stdout.read().strip()
+    return stdout
 
 
 def main():
@@ -566,10 +568,11 @@ def main():
             dmenu_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding="utf-8"
         ) as proc:
             proc.stdin.write("\n".join(lines))
+            proc.stdin.close()
+            stdout = proc.stdout.read()
 
         if proc.returncode != 0:
             fatal(f"dmenu exit {proc.returncode}")
-        stdout = proc.stdout.read()
         i = lines.index(stdout.strip())
         item = lines_item[i]
         info("Selected:", item_title(item))
