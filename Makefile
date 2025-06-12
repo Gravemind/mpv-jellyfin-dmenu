@@ -5,20 +5,20 @@ TYPOS = $(VENV)/bin/typos
 
 SRC = mpv-jellyfin-dmenu.py
 
-.PHONLY: default
+.PHONY: default
 default: lint typos test
 
-.PHONLY: lint
+.PHONY: lint
 lint: $(PY3)
 	$(PY3) -m black -l 99 $(SRC)
 	$(PY3) -m flake8 $(SRC)
 	$(PY3) -m pylint $(SRC)
 
-.PHONLY: typos
+.PHONY: typos
 typos: $(TYPOS)
 	$(TYPOS) $(SRC)
 
-.PHONLY: test
+.PHONY: test
 test: $(PY3)
 	$(PY3) -m pytest $(SRC)
 
