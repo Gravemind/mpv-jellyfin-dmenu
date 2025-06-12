@@ -30,6 +30,13 @@ $ mpv-jellyfin-dmenu
 [rofi]: https://davatorium.github.io/rofi
 [wofi]: https://hg.sr.ht/~scoopta/wofi
 
+## Yet another mpv Jellyfin
+
+- https://github.com/EmperorPenguin18/mpv-jellyfin
+- https://github.com/jellyfin/jellyfin-mpv-shim/tree/master/jellyfin_mpv_shim
+- https://github.com/nonomal/jellyfin-desktop
+- https://github.com/Aanok/jftui
+
 ## Development
 
 ```sh
