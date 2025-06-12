@@ -1,6 +1,6 @@
 # mpv Jellyfin dmenu
 
-A simple Jellyfin media selection program using [rofi], [wofi], or
+A simple [Jellyfin] media selection program using [rofi], [wofi], or
 [dmenu]. Launches [mpv] and reports playback progress to Jellyfin while playing.
 
 ## Usage
@@ -24,6 +24,7 @@ $ export DMENU="rofi -dmenu -i"
 $ mpv-jellyfin-dmenu
 ```
 
+[Jellyfin]: https://jellyfin.org/
 [mpv]: https://mpv.io/
 [dmenu]: https://tools.suckless.org/dmenu
 [rofi]: https://davatorium.github.io/rofi
