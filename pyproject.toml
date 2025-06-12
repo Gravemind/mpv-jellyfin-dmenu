@@ -1,0 +1,17 @@
+[tool.black]
+line-length = 99
+
+[tool.pylint."messages control"]
+disable=[
+    "attribute-defined-outside-init",  # Because of Config
+    "invalid-name",  # module name non-snake-case
+    "fixme",
+    "missing-function-docstring",
+    "missing-module-docstring",
+    "too-many-branches",
+    "too-many-statements",
+    "too-many-locals",
+]
+
+[tool.typos.default.extend-words]
+typ = "typ"
