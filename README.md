@@ -40,6 +40,8 @@ make
 - Add ini config file for dmenu command and more
 - Add icons configuration
 - Add playback reporting configuration (interval)
+- Add Latest count configuration
 - Add `mark-watched-at` (or something) to replace popup
 - Use dmenu for authentication instead of terminal
+- Add the total number of episode in the season in shows titles
 - Write more tests
