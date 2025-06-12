@@ -430,9 +430,11 @@ def dmenu_ask(prompt, stdin):
         if stdin:
             proc.stdin.write(stdin)
             proc.stdin.close()
-        stdout = proc.stdout.read().strip()
+        stdout = proc.stdout.read()
     if proc.returncode != 0:
         return None
+    if stdout[-1] == "\n":
+        stdout = stdout[:-1]
     return stdout
 
 
@@ -563,17 +565,11 @@ def main():
             its = jellyfin_get("Items", {"userId": GLOBAL.user_id, "parentId": next_item["Id"]})
             push_items(its["Items"])
 
-        dmenu_cmd = GLOBAL.dmenu_cmd + ["-p", "mpv-jellyfin-dmenu"]
-        with subprocess.Popen(
-            dmenu_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding="utf-8"
-        ) as proc:
-            proc.stdin.write("\n".join(lines))
-            proc.stdin.close()
-            stdout = proc.stdout.read()
+        ans = dmenu_ask("mpv-jellyfin-dmenu", "\n".join(lines))
+        if ans is None:
+            fatal("abort.")
 
-        if proc.returncode != 0:
-            fatal(f"dmenu exit {proc.returncode}")
-        i = lines.index(stdout.strip())
+        i = lines.index(ans)
         item = lines_item[i]
         info("Selected:", item_title(item))
 
