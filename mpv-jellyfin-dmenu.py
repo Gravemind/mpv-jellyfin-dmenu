@@ -375,15 +375,26 @@ def now_iso():
 
 
 def mpv_play_item(item):
+
+    # Should we get a fresh playcount ?
+    play_count = item["UserData"]["PlayCount"]
+    res = jellyfin_post(
+        f"UserItems/{item['Id']}/UserData",
+        {"userId": GLOBAL.user_id},
+        {
+            "PlayCount": play_count + 1,
+            "LastPlayedDate": now_iso(),
+        },
+    )
+    # Replace with fresh user data
+    assert set(res.keys()) == set(item["UserData"].keys())
+    item["UserData"] = res
+
     url = AUTH_CONFIG.url + f"/Videos/{item['Id']}/stream?static=true"
     title = item_title(item, menu=False)
     ud = item["UserData"]
     playback_ticks = ud["PlaybackPositionTicks"]
-    play_count = ud["PlayCount"]
-    played = ud["Played"]
     runtime_ticks = item["RunTimeTicks"]
-
-    play_count += 1
 
     def ticks_to_pct(ticks):
         return 100.0 * (float(ticks) / float(runtime_ticks))
@@ -404,13 +415,8 @@ def mpv_play_item(item):
                 res = jellyfin_post(
                     f"UserItems/{item['Id']}/UserData",
                     {"userId": GLOBAL.user_id},
-                    {
-                        "PlaybackPositionTicks": playback_ticks,
-                        "LastPlayedDate": now_iso(),
-                        "PlayCount": play_count,
-                    },
+                    {"PlaybackPositionTicks": playback_ticks},
                 )
-                played = res["Played"]
 
     if watcher.returncode != 0:
         fatal(f"mpv exit {watcher.returncode}")
