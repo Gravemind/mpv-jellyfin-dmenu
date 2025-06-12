@@ -14,6 +14,7 @@ import datetime
 import select
 import shutil
 import shlex
+from contextlib import contextmanager
 from functools import partial
 from textwrap import dedent
 from types import SimpleNamespace
@@ -148,6 +149,10 @@ def debug(*msg):
 
 def info(*msg):
     print(*msg, file=sys.stderr)
+
+
+def error(*msg):
+    print("error:", *msg, file=sys.stderr)
 
 
 def fatal(*msg):
@@ -297,101 +302,122 @@ def test_json_load_multiple():
     assert list(json_load_multiple(b"[1]\n[2]\n[")) == [([1], b"[2]\n["), ([2], b"[")]
 
 
-def mpv_play_item(item):
+class MpvWatcher:
+    """Handle for watched_mpv."""
 
-    myfd, mpvfd = socket.socketpair()
-
-    video_id = item["Id"]
-    video_url = AUTH_CONFIG.url + f"/Videos/{video_id}/stream?static=true"
-    info("Video url:", video_url)
-
-    mpv_cmd = ["mpv", f"--input-ipc-client=fd://{mpvfd.fileno()}"]
-    pct = item_played_percent(item)
-    if pct:
-        info(f"Resuming video at {pct:.2f}%")
-        mpv_cmd.append(f"--start={pct:.2f}%")
-
-    title = item_title(item, menu=False) + " (mpv-jellyfin-dmenu)"
-    mpv_cmd.append("--force-media-title=" + title)
-
-    mpv_cmd.extend(GLOBAL.mpv_args)
-    mpv_cmd.append("--")
-    mpv_cmd.append(video_url)
-
-    with subprocess.Popen(mpv_cmd, pass_fds=(mpvfd.fileno(),)) as proc:
-        mpvfd.close()
-
-        runtime_ticks = item["RunTimeTicks"]
-        ud = item["UserData"]
-        playback_ticks = ud["PlaybackPositionTicks"]
-        play_count = ud["PlayCount"]
-        played = ud["Played"]
-
-        play_count += 1
-
-        # { "command": ["observe_property", 1, "volume"] }
-
-        ask_playback_pct_id = 42
-        ask_playback_pct_cmd = (
+    def __init__(self, fd, playback_pct):
+        self.fd = fd
+        self.playback_pct = playback_pct
+        self.ask_playback_pct_id = 42
+        self.ask_playback_pct_cmd = (
             json.dumps(
                 {
                     "command": ["get_property", "percent-pos"],
-                    "request_id": ask_playback_pct_id,
+                    "request_id": self.ask_playback_pct_id,
                 }
             ).encode()
             + b"\n"
         )
+        self.returncode = None
+        self.data = b""
 
-        title = item_title(item, menu=False)
+    def loop(self, interval):
+        fd = self.fd
+        data = self.data
+        fds = (fd.fileno(),)
+        r, _, x = select.select(fds, (), fds, interval)
+        if x:
+            return False
+        if r:
+            recv = fd.recv(1024 * 4)
+            if not recv:  # (disconnected)
+                return False
+            data += recv
+            for msg, data in json_load_multiple(data):
+                debug("recv from mpv:", msg)
+                if msg.get("request_id") == self.ask_playback_pct_id:
+                    self.playback_pct = msg["data"]
+            if data:
+                debug("partial recv:", data)
+        else:  # (timeout)
+            fd.sendall(self.ask_playback_pct_cmd)
+        return True
 
-        def now():
-            return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        data = b""
-        new_playback_ticks = playback_ticks
-        while True:
-            fds = (myfd.fileno(),)
-            r, _, x = select.select(fds, (), fds, 10.0)
-            if x:
-                break
-            if r:
-                recv = myfd.recv(1024 * 4)
-                if not recv:  # (disconnected)
-                    break
-                data += recv
-                for msg, data in json_load_multiple(data):
-                    debug("recv from mpv:", msg)
-                    if msg.get("request_id") == ask_playback_pct_id:
-                        playback_pct = msg["data"]
-                        new_playback_ticks = int(runtime_ticks * (playback_pct / 100.0))
-                if data:
-                    debug("partial recv:", data)
-            else:  # (timeout)
-                myfd.sendall(ask_playback_pct_cmd)
+@contextmanager
+def watched_mpv(url, title, playback_pct):
+    myfd, mpvfd = socket.socketpair()
 
-            if playback_ticks != new_playback_ticks:
-                playback_ticks = new_playback_ticks
+    mpv_cmd = ["mpv", f"--input-ipc-client=fd://{mpvfd.fileno()}"]
+    if playback_pct:
+        info(f"Resuming video at {playback_pct:.2f}%")
+        mpv_cmd.append(f"--start={playback_pct:.2f}%")
+    mpv_cmd.append("--force-media-title=" + title)
+    mpv_cmd.extend(GLOBAL.mpv_args)
+    mpv_cmd.append("--")
+    mpv_cmd.append(url)
+
+    watcher = MpvWatcher(myfd, playback_pct=playback_pct)
+    with subprocess.Popen(mpv_cmd, pass_fds=(mpvfd.fileno(),)) as proc:
+        mpvfd.close()
+        try:
+            yield watcher
+        except Exception as e:
+            error(e, "... waiting for mpv to quit")
+            raise
+
+    myfd.close()
+    watcher.returncode = proc.returncode
+
+
+def now_iso():
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def mpv_play_item(item):
+    url = AUTH_CONFIG.url + f"/Videos/{item['Id']}/stream?static=true"
+    title = item_title(item, menu=False)
+    ud = item["UserData"]
+    playback_ticks = ud["PlaybackPositionTicks"]
+    play_count = ud["PlayCount"]
+    played = ud["Played"]
+    runtime_ticks = item["RunTimeTicks"]
+
+    play_count += 1
+
+    def ticks_to_pct(ticks):
+        return 100.0 * (float(ticks) / float(runtime_ticks))
+
+    def pct_to_ticks(pct):
+        return int(runtime_ticks * (pct / 100.0))
+
+    playback_pct = ticks_to_pct(playback_ticks)
+
+    with watched_mpv(
+        url=url, title=title + " (mpv-jellyfin-dmenu)", playback_pct=playback_pct
+    ) as watcher:
+        while watcher.loop(10.0):
+            if playback_pct != watcher.playback_pct:
+                playback_pct = watcher.playback_pct
+                playback_ticks = pct_to_ticks(playback_pct)
                 # TODO: support lost connection (or token change, etc.)
                 res = jellyfin_post(
                     f"UserItems/{item['Id']}/UserData",
                     {"userId": GLOBAL.user_id},
                     {
                         "PlaybackPositionTicks": playback_ticks,
-                        "LastPlayedDate": now(),
+                        "LastPlayedDate": now_iso(),
                         "PlayCount": play_count,
                     },
                 )
                 played = res["Played"]
 
-    myfd.close()
-
-    if proc.returncode != 0:
-        fatal(f"mpv exit {proc.returncode}")
+    if watcher.returncode != 0:
+        fatal(f"mpv exit {watcher.returncode}")
 
     info("")
-    pct = (100.0 * playback_ticks) / runtime_ticks
     menu = [
-        f"⏳ In progress at {pct:.0f}%",
+        f"⏳ In progress at {playback_pct:.0f}%",
         "✅ Watched",
         "❎ Not watched",
     ]
@@ -401,20 +427,20 @@ def mpv_play_item(item):
     ansid = menu.index(ans)
     if ansid == 0:
         played = False
-        pos = playback_ticks
     elif ansid == 1:
         played = True
-        pos = 0
+        playback_ticks = 0
     elif ansid == 2:
         played = False
-        pos = 0
+        playback_ticks = 0
     else:
         assert False
-    info(f"Marking played={played} pos={(100.0 * pos / runtime_ticks):.0f}%: {title}")
+    playback_pct = ticks_to_pct(playback_ticks)
+    info(f"Marking played={played} pos={playback_pct:.0f}%: {title}")
     jellyfin_post(
         f"UserItems/{item['Id']}/UserData",
         {"userId": GLOBAL.user_id},
-        {"Played": played, "PlaybackPositionTicks": pos},
+        {"Played": played, "PlaybackPositionTicks": playback_ticks},
     )
 
 

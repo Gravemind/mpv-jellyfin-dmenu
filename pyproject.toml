@@ -5,6 +5,7 @@ line-length = 99
 disable=[
     "attribute-defined-outside-init",  # Because of Config
     "invalid-name",  # module name non-snake-case
+    "too-few-public-methods",  # Because of MpvWatcher
     "fixme",
     "missing-function-docstring",
     "missing-module-docstring",
