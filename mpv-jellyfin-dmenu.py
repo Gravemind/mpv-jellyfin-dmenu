@@ -37,7 +37,7 @@ dmenu_command =
 # https://jellyfin.josmind.com/web/#/dashboard/playback/resume
 jellyfin_watched_rules = true
 
-# Delay before, and interval between, playback position reporting
+# Interval between playback position reporting
 playback_report_interval = 4.0
 
 icon_watched = ✅
@@ -385,11 +385,12 @@ def test_json_load_multiple():
 class MpvWatcher:
     """Handle for watched_mpv."""
 
-    def __init__(self, fd, playback_pct):
+    def __init__(self, fd, playback_pct, interval):
         self.fd = fd
         self.playback_pct = playback_pct
+        self.interval = interval
         self.returncode = None
-        self.loop_gen_it = None
+        self.loop_gen_it = self.loop_gen()
 
     def loop_gen(self):
         pb_req_id = 42
@@ -406,14 +407,22 @@ class MpvWatcher:
         fd = self.fd
         fds = (fd.fileno(),)
         data = b""
-        last_pb_upd = time.monotonic()
+
+        # Shorter delay after seek: doesn't change yield interval, but gets us a better last
+        # position after seek and quit.
+        fast_delay = 0.1
+
+        now = time.monotonic()
+        next_pb_update = now + self.interval
+        next_yield = now + self.interval
         while True:
-            r, _, x = select.select(fds, (), fds, self.interval)
+            r, _, x = select.select(fds, (), fds, max(0, now - min(next_pb_update, next_yield)))
             if x:
                 return
+
             now = time.monotonic()
             if r:
-                recv = fd.recv(1024 * 4)
+                recv = fd.recv(1024 * 4)  # shouldn't block
                 if not recv:  # (disconnected)
                     return
                 data += recv
@@ -421,23 +430,24 @@ class MpvWatcher:
                     debug("recv from mpv:", msg)
                     if msg.get("request_id") == pb_req_id:
                         self.playback_pct = msg.get("data")
-                        last_pb_upd = now
-                    elif msg.get("event") in ["seek", "playback-restart"]:
-                        # Reset timer on seek
-                        last_pb_upd = now
+                        next_pb_update = now + self.interval
+                    elif msg.get("event") in ["seek"]:
+                        # "seek" event is when seeking begins
+                        # "playback-restart" event is when playback restarts after seek
+                        next_pb_update = now + fast_delay
                 if data:
                     debug("partial recv:", data)
 
-            if now - last_pb_upd >= self.interval:
-                self.fd.sendall(pb_cmd)
-                last_pb_upd = time.monotonic()
+            if now >= next_yield:
+                next_yield = now + self.interval
+                yield
 
-            yield
+            if now >= next_pb_update:
+                self.fd.sendall(pb_cmd)  # blocks
+                now = time.monotonic()
+                next_pb_update = now + self.interval
 
-    def loop(self, interval):
-        self.interval = interval
-        if self.loop_gen_it is None:
-            self.loop_gen_it = self.loop_gen()
+    def loop(self):
         try:
             next(self.loop_gen_it)
             return True
@@ -446,7 +456,7 @@ class MpvWatcher:
 
 
 @contextmanager
-def watched_mpv(url, title, playback_pct):
+def watched_mpv(url, title, playback_pct, interval):
     myfd, mpvfd = socket.socketpair()
 
     mpv_cmd = ["mpv", f"--input-ipc-client=fd://{mpvfd.fileno()}"]
@@ -458,7 +468,7 @@ def watched_mpv(url, title, playback_pct):
     mpv_cmd.append("--")
     mpv_cmd.append(url)
 
-    watcher = MpvWatcher(myfd, playback_pct=playback_pct)
+    watcher = MpvWatcher(myfd, playback_pct=playback_pct, interval=interval)
     with subprocess.Popen(mpv_cmd, pass_fds=(mpvfd.fileno(),)) as proc:
         mpvfd.close()
         try:
@@ -506,18 +516,25 @@ def mpv_play_item(item):
     playback_pct = ticks_to_pct(playback_ticks)
 
     with watched_mpv(
-        url=url, title=title + " (mpv-jellyfin-dmenu)", playback_pct=playback_pct
+        url=url,
+        title=title + " (mpv-jellyfin-dmenu)",
+        playback_pct=playback_pct,
+        interval=GLOBAL.playback_report_interval,
     ) as watcher:
-        while watcher.loop(GLOBAL.playback_report_interval):
+        while watcher.loop():
             if watcher.playback_pct != playback_pct:
                 playback_pct = watcher.playback_pct
                 playback_ticks = pct_to_ticks(playback_pct)
                 # TODO: support lost connection (or token change, etc.)
-                res = jellyfin_post(
+                jellyfin_post(
                     f"UserItems/{item['Id']}/UserData",
                     {"userId": GLOBAL.user_id},
                     {"PlaybackPositionTicks": playback_ticks, "Played": False},
                 )
+
+    # Get very last known position
+    playback_pct = watcher.playback_pct
+    playback_ticks = pct_to_ticks(playback_pct)
 
     if watcher.returncode != 0:
         fatal(f"mpv exit {watcher.returncode}")
