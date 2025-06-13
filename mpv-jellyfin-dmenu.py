@@ -461,7 +461,7 @@ def dmenu_ask(prompt, stdin):
     ) as proc:
         if stdin:
             proc.stdin.write(stdin)
-            proc.stdin.close()
+        proc.stdin.close()
         stdout = proc.stdout.read()
     if proc.returncode != 0:
         return None
