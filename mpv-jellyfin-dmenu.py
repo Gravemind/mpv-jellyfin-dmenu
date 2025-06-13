@@ -32,6 +32,17 @@ except ImportError:
 DEFAULT_CONFIG_INI = """
 [mpv-jellyfin-dmenu]
 dmenu_command =
+icon_watched = ✅
+icon_not_watched = ❎
+icon_in_progress = ⏳
+icon_continue = ▶️
+icon_play_next = ⏭️️
+icon_parent_folder = 🔙
+icon_collection_folder = 📂
+icon_movie = 🎬
+icon_show = 📺
+icon_season = 📺
+icon_video = 🎬
 """
 
 DEFAULT_AUTH_INI = """
@@ -265,16 +276,18 @@ def item_title(item, menu=True):
     if menu:
         typ = item["Type"]
 
-        if typ in ["ParentFolder"]:
-            icon = "🔙"
-        elif typ in ["CollectionFolder"]:
-            icon = "📂"
+        if typ == "ParentFolder":
+            icon = CONFIG.icon_parent_folder
+        elif typ == "CollectionFolder":
+            icon = CONFIG.icon_collection_folder
+        elif typ == "Series":
+            icon = CONFIG.icon_show
+        elif typ == "Season":
+            icon = CONFIG.icon_season
+        elif typ == "Movie":
+            icon = CONFIG.icon_movie
         elif item.get("MediaType") == "Video":
-            icon = "🎬"
-        elif typ in ["Series", "Season"]:
-            icon = "📺"
-        elif typ in ["Movie"]:
-            icon = "🎬"
+            icon = CONFIG.icon_video
         else:
             icon = f"[{typ}]"
 
@@ -284,9 +297,9 @@ def item_title(item, menu=True):
         watched = ud.get("Played", False)
         watched_pos = item_played_percent(item)
         if watched:
-            title.append("✅")
+            title.append(CONFIG.icon_watched)
         if watched_pos:
-            title.append(f"⏳{watched_pos:.0f}%")
+            title.append(f"{CONFIG.icon_in_progress}{watched_pos:.0f}%")
 
     y = item.get("ProductionYear")
 
@@ -462,9 +475,9 @@ def mpv_play_item(item):
 
     info("")
     menu = [
-        f"⏳ In progress at {playback_pct:.0f}%",
-        "✅ Watched",
-        "❎ Not watched",
+        f"{CONFIG.icon_in_progress} In progress at {playback_pct:.0f}%",
+        f"{CONFIG.icon_watched} Watched",
+        f"{CONFIG.icon_not_watched} Not watched",
     ]
     ans = dmenu_ask(f"Mark: {title}", "\n".join(menu))
     if ans is None:
@@ -608,11 +621,11 @@ def main():
 
             # Continue watching
             resumes = jellyfin_get("UserItems/Resume", {"mediaTypes": "Video"})
-            push_items(resumes["Items"], prefix="▶️ ")
+            push_items(resumes["Items"], prefix=f"{CONFIG.icon_continue} ")
 
             # Next-up
             nexts = jellyfin_get("Shows/NextUp", {"mediaTypes": "Video"})
-            push_items(nexts["Items"], prefix="⏭️ ")
+            push_items(nexts["Items"], prefix=f"{CONFIG.icon_play_next} ")
 
             # Root folders and their latest items
             roots = jellyfin_get("UserViews", {"userId": GLOBAL.user_id})

@@ -38,7 +38,6 @@ make
 
 ### Todo
 
-- Add icons configuration
 - Add playback reporting configuration (interval)
 - Add Latest count configuration
 - Add `mark-watched-at` (or something) to replace popup
