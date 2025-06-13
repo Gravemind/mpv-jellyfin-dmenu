@@ -38,7 +38,6 @@ make
 
 ### Todo
 
-- Add ini config file for dmenu command and more
 - Add icons configuration
 - Add playback reporting configuration (interval)
 - Add Latest count configuration

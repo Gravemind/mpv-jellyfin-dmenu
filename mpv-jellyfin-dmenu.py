@@ -29,6 +29,18 @@ except ImportError:
     CONFIG_DIR = os.environ.get("XDG_CONFIG_HOME", os.path.join(os.environ["HOME"], ".config"))
 
 
+DEFAULT_CONFIG_INI = """
+[mpv-jellyfin-dmenu]
+dmenu_command =
+"""
+
+DEFAULT_AUTH_INI = """
+[jellyfin_authentication]
+url =
+token =
+device_id =
+"""
+
 DMENUS = [
     ["rofi", "-dmenu", "-i"],
     ["wofi", "--dmenu", "-i"],
@@ -39,6 +51,7 @@ DMENUS = [
 def make_parser():
     parser = argparse.ArgumentParser(
         description="Select jellyfin media with dmenu and play them with mpv",
+        epilog=f"Config example (see --config):\n{DEFAULT_CONFIG_INI}\n ",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -48,6 +61,11 @@ def make_parser():
         "--auth-config",
         default=os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/auth.ini"),
         help="Generated authentication data (%(default)s).",
+    )
+    parser.add_argument(
+        "--config",
+        default=os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/config.ini"),
+        help="Config file (%(default)s).",
     )
     avail = " or ".join(next(zip(*DMENUS)))
     parser.add_argument(
@@ -64,31 +82,41 @@ def make_parser():
 class Config:
     """Simplest ini config."""
 
-    def __init__(self, section, attributes):
-        self.path = None
-        self.section = section
-        self.attributes = attributes
-        for k in self.attributes:
-            setattr(self, k, None)
+    def __init__(self, default):
+        ini = configparser.ConfigParser()
+        ini.read_string(default)
+        self.__dict__.update(
+            {
+                "_path": None,
+                "_ini": ini,
+                "_section": ini.sections()[0],
+            }
+        )
+
+    def set_path(self, path):
+        self._path = path
 
     def read(self):
-        ini = configparser.ConfigParser()
-        ini.read(self.path)
-        if self.section in ini:
-            for k in self.attributes:
-                setattr(self, k, str(ini[self.section].get(k, "")))
+        self._ini.read(self._path)
 
     def write(self):
-        ini = configparser.ConfigParser()
-        ini[self.section] = {}
-        for k in self.attributes:
-            ini[self.section][k] = str(getattr(self, k, "") or "")
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as f:
-            ini.write(f)
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        with open(self._path, "w", encoding="utf-8") as f:
+            self._ini.write(f)
+
+    def __getattr__(self, name):
+        return self._ini[self._section][name]
+
+    def __setattr__(self, name, value):
+        if name in self.__dict__:
+            self.__dict__[name] = value
+        else:
+            self._ini[self._section][name] = value
 
 
-AUTH_CONFIG = Config("jellyfin_authentication", ("url", "token", "device_id"))
+AUTH_CONFIG = Config(DEFAULT_AUTH_INI)
+
+CONFIG = Config(DEFAULT_CONFIG_INI)
 
 GLOBAL = SimpleNamespace()
 
@@ -487,12 +515,15 @@ def main():
     parser = make_parser()
     opts = parser.parse_args()
 
+    CONFIG.set_path(opts.config)
+    CONFIG.read()
+
     GLOBAL.debug = opts.debug
 
-    AUTH_CONFIG.path = opts.auth_config
+    AUTH_CONFIG.set_path(opts.auth_config)
     AUTH_CONFIG.read()
 
-    dmenu_str = opts.dmenu or os.environ.get("DMENU")
+    dmenu_str = opts.dmenu or CONFIG.dmenu_command or os.environ.get("DMENU")
     if dmenu_str:
         dmenu_cmd = shlex.split(dmenu_str)
         if not shutil.which(dmenu_cmd[0]):
