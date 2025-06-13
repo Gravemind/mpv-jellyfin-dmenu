@@ -43,6 +43,7 @@ make
 - Add playback reporting configuration (interval)
 - Add Latest count configuration
 - Add `mark-watched-at` (or something) to replace popup
+- Add option to quit after watching for movies or shows
 - Use dmenu for authentication instead of terminal
 - Add the total number of episode in the season in shows titles
 - Write more tests
