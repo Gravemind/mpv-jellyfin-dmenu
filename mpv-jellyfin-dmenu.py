@@ -15,6 +15,7 @@ import select
 import shutil
 import shlex
 import secrets
+import time
 from contextlib import contextmanager
 from functools import partial
 from textwrap import dedent
@@ -35,6 +36,9 @@ dmenu_command =
 
 # https://jellyfin.josmind.com/web/#/dashboard/playback/resume
 jellyfin_watched_rules = true
+
+# Delay before, and interval between, playback position reporting
+playback_report_interval = 4.0
 
 icon_watched = ✅
 icon_not_watched = ❎
@@ -71,7 +75,7 @@ def make_parser():
 
     parser = argparse.ArgumentParser(
         description="Select jellyfin media with dmenu and play them with mpv",
-        epilog=f"Default config:\n{DEFAULT_CONFIG_INI}\n ",
+        epilog=f"Default config:\n\n```ini{DEFAULT_CONFIG_INI}```\n ",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -384,40 +388,61 @@ class MpvWatcher:
     def __init__(self, fd, playback_pct):
         self.fd = fd
         self.playback_pct = playback_pct
-        self.ask_playback_pct_id = 42
-        self.ask_playback_pct_cmd = (
+        self.returncode = None
+        self.loop_gen_it = None
+
+    def loop_gen(self):
+        pb_req_id = 42
+        pb_cmd = (
             json.dumps(
                 {
                     "command": ["get_property", "percent-pos"],
-                    "request_id": self.ask_playback_pct_id,
+                    "request_id": pb_req_id,
                 }
             ).encode()
             + b"\n"
         )
-        self.returncode = None
-        self.data = b""
+
+        fd = self.fd
+        fds = (fd.fileno(),)
+        data = b""
+        last_pb_upd = time.monotonic()
+        while True:
+            r, _, x = select.select(fds, (), fds, self.interval)
+            if x:
+                return
+            now = time.monotonic()
+            if r:
+                recv = fd.recv(1024 * 4)
+                if not recv:  # (disconnected)
+                    return
+                data += recv
+                for msg, data in json_load_multiple(data):
+                    debug("recv from mpv:", msg)
+                    if msg.get("request_id") == pb_req_id:
+                        self.playback_pct = msg.get("data")
+                        last_pb_upd = now
+                    elif msg.get("event") in ["seek", "playback-restart"]:
+                        # Reset timer on seek
+                        last_pb_upd = now
+                if data:
+                    debug("partial recv:", data)
+
+            if now - last_pb_upd >= self.interval:
+                self.fd.sendall(pb_cmd)
+                last_pb_upd = time.monotonic()
+
+            yield
 
     def loop(self, interval):
-        fd = self.fd
-        data = self.data
-        fds = (fd.fileno(),)
-        r, _, x = select.select(fds, (), fds, interval)
-        if x:
+        self.interval = interval
+        if self.loop_gen_it is None:
+            self.loop_gen_it = self.loop_gen()
+        try:
+            next(self.loop_gen_it)
+            return True
+        except StopIteration:
             return False
-        if r:
-            recv = fd.recv(1024 * 4)
-            if not recv:  # (disconnected)
-                return False
-            data += recv
-            for msg, data in json_load_multiple(data):
-                debug("recv from mpv:", msg)
-                if msg.get("request_id") == self.ask_playback_pct_id:
-                    self.playback_pct = msg["data"]
-            if data:
-                debug("partial recv:", data)
-        else:  # (timeout)
-            fd.sendall(self.ask_playback_pct_cmd)
-        return True
 
 
 @contextmanager
@@ -483,15 +508,15 @@ def mpv_play_item(item):
     with watched_mpv(
         url=url, title=title + " (mpv-jellyfin-dmenu)", playback_pct=playback_pct
     ) as watcher:
-        while watcher.loop(10.0):
-            if playback_pct != watcher.playback_pct:
+        while watcher.loop(GLOBAL.playback_report_interval):
+            if watcher.playback_pct != playback_pct:
                 playback_pct = watcher.playback_pct
                 playback_ticks = pct_to_ticks(playback_pct)
                 # TODO: support lost connection (or token change, etc.)
                 res = jellyfin_post(
                     f"UserItems/{item['Id']}/UserData",
                     {"userId": GLOBAL.user_id},
-                    {"PlaybackPositionTicks": playback_ticks},
+                    {"PlaybackPositionTicks": playback_ticks, "Played": False},
                 )
 
     if watcher.returncode != 0:
@@ -509,6 +534,7 @@ def mpv_play_item(item):
 
         # https://learn.microsoft.com/en-us/dotnet/api/system.timespan.tickspersecond?view=net-9.0#system-timespan-tickspersecond
         ticks_per_seconds = 10000000
+
         if runtime_ticks / ticks_per_seconds < min_duration:
             played = True
             playback_ticks = 0
@@ -519,7 +545,7 @@ def mpv_play_item(item):
             played = True
             playback_ticks = 0
         else:
-            played = True
+            played = False
 
     else:
         menu = [
@@ -581,6 +607,7 @@ def main():
     CONFIG.read()
 
     GLOBAL.debug = opts.debug
+    GLOBAL.playback_report_interval = float(CONFIG.playback_report_interval.strip() or 5.0)
 
     if opts.jellyfin_watched_rules is not None:
         GLOBAL.jellyfin_watched_rules = opts.jellyfin_watched_rules

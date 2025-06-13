@@ -49,7 +49,6 @@ make
 
 ### Todo
 
-- Add playback reporting configuration (interval)
 - Add Latest count configuration
 - Add option to quit after watching for movies or shows
 - Use dmenu for authentication instead of terminal
