@@ -82,7 +82,7 @@ class Config:
         ini[self.section] = {}
         for k in self.attributes:
             ini[self.section][k] = str(getattr(self, k, "") or "")
-        os.makedirs(os.path.dirname(self.path))
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as f:
             ini.write(f)
 
