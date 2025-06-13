@@ -3,6 +3,12 @@
 A simple [Jellyfin] media selection program using [rofi], [wofi], or
 [dmenu]. Launches [mpv] and reports playback progress to Jellyfin while playing.
 
+## Installation
+
+You can use `./mpv-jellyfin-dmenu` directly.
+
+You can copy or symlink `mpv-jellyfin-dmenu` somewhere in your `$PATH` (`~/.local/bin`).
+
 ## Usage
 
 **First, authenticate from a terminal with Jellyfin Quick Connect:**
