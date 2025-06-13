@@ -32,6 +32,10 @@ except ImportError:
 DEFAULT_CONFIG_INI = """
 [mpv-jellyfin-dmenu]
 dmenu_command =
+
+# https://jellyfin.josmind.com/web/#/dashboard/playback/resume
+jellyfin_watched_rules = true
+
 icon_watched = ✅
 icon_not_watched = ❎
 icon_in_progress = ⏳
@@ -58,6 +62,8 @@ DMENUS = [
     ["dmenu", "-i"],
 ]
 
+YESES = ["true", "yes", "1", "on"]
+
 
 def make_parser():
     default_auth_path = os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/auth.ini")
@@ -74,18 +80,33 @@ def make_parser():
     parser.add_argument(
         "--auth-config",
         default=default_auth_path,
-        help="Generated authentication data (%(default)s).",
+        help="Generated authentication data.\ndefault: %(default)s",
     )
     parser.add_argument(
         "--config",
         default=default_config_path,
-        help="Config file (%(default)s).",
+        help="Config file.\ndefault: %(default)s",
+    )
+    parser.add_argument(
+        "--jellyfin-watched-rules",
+        dest="jellyfin_watched_rules",
+        action="store_true",
+        default=None,
+        help="Follow jellyfin rules to mark as watched/progress.\n"
+        "See https://jellyfin.josmind.com/web/#/dashboard/playback/resume",
+    )
+    parser.add_argument(
+        "--ask-watched",
+        dest="jellyfin_watched_rules",
+        action="store_false",
+        default=None,
+        help="Disable --jellyfin-watched-rules: ask watched/played state after playing.",
     )
     avail = " or ".join(next(zip(*DMENUS)))
     parser.add_argument(
         "-d",
         "--dmenu",
-        help=f"The dmenu command (by default, looks for $DMENU, {avail}).",
+        help=f"The dmenu command.\ndefault: $DMENU or {avail}",
     )
     parser.add_argument("--debug", action="store_true", help="Debug print.")
     parser.add_argument("mpv_args", nargs="*", help="Additional mpv arguments")
@@ -449,6 +470,7 @@ def mpv_play_item(item):
     ud = item["UserData"]
     playback_ticks = ud["PlaybackPositionTicks"]
     runtime_ticks = item["RunTimeTicks"]
+    played = ud["Played"]
 
     def ticks_to_pct(ticks):
         return 100.0 * (float(ticks) / float(runtime_ticks))
@@ -474,27 +496,52 @@ def mpv_play_item(item):
 
     if watcher.returncode != 0:
         fatal(f"mpv exit {watcher.returncode}")
-
     info("")
-    menu = [
-        f"{CONFIG.icon_in_progress} In progress at {playback_pct:.0f}%",
-        f"{CONFIG.icon_watched} Watched",
-        f"{CONFIG.icon_not_watched} Not watched",
-    ]
-    ans = dmenu_ask(f"Mark: {title}", "\n".join(menu))
-    if ans is None:
-        fatal("abort.")
-    ansid = menu.index(ans)
-    if ansid == 0:
-        played = False
-    elif ansid == 1:
-        played = True
-        playback_ticks = 0
-    elif ansid == 2:
-        played = False
-        playback_ticks = 0
+
+    # Get jellyfin watched/resume rules
+    # https://jellyfin.josmind.com/web/#/dashboard/playback/resume
+    if GLOBAL.jellyfin_watched_rules:
+        # Late fetch to get latest config
+        res = jellyfin_get("System/Configuration", {}, {})
+        min_duration = res["MinResumeDurationSeconds"]
+        min_resume = res["MinResumePct"]
+        max_resume = res["MaxResumePct"]
+
+        # https://learn.microsoft.com/en-us/dotnet/api/system.timespan.tickspersecond?view=net-9.0#system-timespan-tickspersecond
+        ticks_per_seconds = 10000000
+        if runtime_ticks / ticks_per_seconds < min_duration:
+            played = True
+            playback_ticks = 0
+        elif playback_pct < min_resume:
+            played = False  # Played mark is removed in Jellyfin
+            playback_ticks = 0
+        elif playback_pct > max_resume:
+            played = True
+            playback_ticks = 0
+        else:
+            played = True
+
     else:
-        assert False
+        menu = [
+            f"{CONFIG.icon_in_progress} In progress at {playback_pct:.0f}%",
+            f"{CONFIG.icon_watched} Watched",
+            f"{CONFIG.icon_not_watched} Not watched",
+        ]
+        ans = dmenu_ask(f"Mark: {title}", "\n".join(menu))
+        if ans is None:
+            fatal("abort.")
+        ansid = menu.index(ans)
+        if ansid == 0:
+            played = False
+        elif ansid == 1:
+            played = True
+            playback_ticks = 0
+        elif ansid == 2:
+            played = False
+            playback_ticks = 0
+        else:
+            assert False
+
     playback_pct = ticks_to_pct(playback_ticks)
     info(f"Marking played={played} pos={playback_pct:.0f}%: {title}")
     jellyfin_post(
@@ -534,6 +581,11 @@ def main():
     CONFIG.read()
 
     GLOBAL.debug = opts.debug
+
+    if opts.jellyfin_watched_rules is not None:
+        GLOBAL.jellyfin_watched_rules = opts.jellyfin_watched_rules
+    else:
+        GLOBAL.jellyfin_watched_rules = CONFIG.jellyfin_watched_rules.lower().strip() in YESES
 
     AUTH_CONFIG.set_path(opts.auth_config)
     AUTH_CONFIG.read()
