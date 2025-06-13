@@ -14,6 +14,7 @@ import datetime
 import select
 import shutil
 import shlex
+import secrets
 from contextlib import contextmanager
 from functools import partial
 from textwrap import dedent
@@ -87,36 +88,43 @@ class Config:
             ini.write(f)
 
 
-AUTH_CONFIG = Config("jellyfin_authentication", ("url", "token"))
+AUTH_CONFIG = Config("jellyfin_authentication", ("url", "token", "device_id"))
 
 GLOBAL = SimpleNamespace()
 
 
 def jellyfin_api(method, uri, query=None, data=None):
     url = AUTH_CONFIG.url + "/" + uri
-    req_data = None
-    name = "mpv-jellyfin-dmenu"
-    device = "mpv-jellyfin-dmenu"
-    token = AUTH_CONFIG.token
-    machine_id = 1
+
+    # Seen as Device AppName by Jellyfin
+    client = "mpv-jellyfin-dmenu"
+    # Seen as Device AppVersion by Jellyfin
     version = "1"
+    # Seen as Device Name by Jellyfin
+    device = "mpv-jellyfin-dmenu@" + socket.gethostname()
+    # Seen as Device Id by Jellyfin
+    device_id = AUTH_CONFIG.device_id or "1"
+
     headers = {
         "Accept": "application/json;charset=utf-8",
         "Authorization": (
-            f"MediaBrowser Client={name}, Device={device}, "
-            f"DeviceId={machine_id}, Version={version}"
+            f"MediaBrowser Client={client}, Version={version}"
+            f", Device={device}, DeviceId={device_id}"
         ),
     }
 
     if query is not None:
         url = url + "?" + urllib.parse.urlencode(query)
+
+    content = None
     if data is not None:
-        req_data = json.dumps(data).encode()
+        content = json.dumps(data).encode()
         headers["Content-type"] = "application/json;charset=utf-8"
 
     if GLOBAL.debug:
         debug("jellyfin_api REQ", method, url, json.dumps(headers), json.dumps(data))
 
+    token = AUTH_CONFIG.token
     if token:
         headers["Authorization"] += f", Token={token}"
 
@@ -124,7 +132,7 @@ def jellyfin_api(method, uri, query=None, data=None):
         url=url,
         method=method,
         headers=headers,
-        data=req_data,
+        data=content,
     )
 
     with urllib.request.urlopen(req) as f:
@@ -162,6 +170,9 @@ def fatal(*msg):
 
 def authenticate():
     info()
+
+    if not AUTH_CONFIG.device_id:
+        AUTH_CONFIG.device_id = secrets.token_bytes(16).hex()
 
     if AUTH_CONFIG.url:
         url = input(f"Please enter your Jellyfin url (defaults to {AUTH_CONFIG.url}): ").strip()
