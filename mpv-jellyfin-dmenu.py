@@ -364,22 +364,66 @@ def json_load_multiple(data):
         for (js, data) in json_load_multiple(data):
             ...
 
+    Supports truncated json and utf-8 char sequence at the end. But if the json is invalid in the
+    middle of data the function will never advance.
+
     """
+    WS = b" \t\n"
+    decoder = json.JSONDecoder()
     while data:
+        data = data.lstrip(WS)
         try:
-            data_str = data.decode()  # Is decode safe over partial data ?
-            js, end = json.JSONDecoder().raw_decode(data_str)
-            data = data_str[end:].lstrip(" \n").encode()
-            yield (js, data)
+            data_str = data.decode()
+            invalid_end = b""
+        except UnicodeDecodeError as e:
+            if e.end == len(data):
+                data_str = data[: e.start].decode()
+                invalid_end = data[e.start :]
+            else:
+                raise
+        try:
+            js, end = decoder.raw_decode(data_str)
         except json.decoder.JSONDecodeError:
+            # (does not work: e.pos reports the beginning of truncated strings)
+            # if e.pos < len(data_str) - 1:
+            #     raise
             break
+        data = data_str[end:].encode().lstrip(WS) + invalid_end
+        yield (js, data)
 
 
 def test_json_load_multiple():
+    import pytest  # pylint: disable=import-outside-toplevel
+
+    assert list(json_load_multiple(b"[1]\n[2]\n")) == [([1], b"[2]\n"), ([2], b"")]
+    assert list(json_load_multiple(b" [1][2]")) == [([1], b"[2]"), ([2], b"")]
     assert list(json_load_multiple(b"[1]\n[2]\n")) == [([1], b"[2]\n"), ([2], b"")]
     assert not list(json_load_multiple(b"["))
     assert list(json_load_multiple(b"[1]\n[2")) == [([1], b"[2")]
     assert list(json_load_multiple(b"[1]\n[2]\n[")) == [([1], b"[2]\n["), ([2], b"[")]
+
+    # Test utf-8
+    assert list(json_load_multiple('[1]\n["☺"]\n['.encode())) == [
+        ([1], '["☺"]\n['.encode()),
+        (["☺"], b"["),
+    ]
+
+    # Test truncated utf-8 char
+    utf = "☺".encode("utf-8")
+    assert len(utf) > 2
+    truncated_utf = utf[:-1]
+    # sanity check
+    with pytest.raises(UnicodeDecodeError):
+        truncated_utf.decode()
+    truncated_utf_json = b'{"truncated":"' + truncated_utf
+    assert not list(json_load_multiple(truncated_utf_json))
+    assert list(json_load_multiple(b'{"valid":1} ' + truncated_utf_json)) == [
+        ({"valid": 1}, truncated_utf_json)
+    ]
+
+    invalid_utf = b'["invalid' + truncated_utf + b'char"]'
+    with pytest.raises(UnicodeDecodeError):
+        list(json_load_multiple(invalid_utf))
 
 
 class MpvWatcher:
