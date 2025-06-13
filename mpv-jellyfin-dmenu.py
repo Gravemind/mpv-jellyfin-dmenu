@@ -87,7 +87,7 @@ class Config:
             ini.write(f)
 
 
-AUTH_CONFIG = Config("jellyfin_authentication", ("url", "token", "user"))
+AUTH_CONFIG = Config("jellyfin_authentication", ("url", "token"))
 
 GLOBAL = SimpleNamespace()
 
