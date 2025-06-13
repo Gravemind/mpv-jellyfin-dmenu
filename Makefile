@@ -10,7 +10,7 @@ default: lint typos test
 
 .PHONY: lint
 lint: $(PY3)
-	$(PY3) -m black -l 99 $(SRC)
+	$(PY3) -m black $(SRC)
 	$(PY3) -m flake8 $(SRC)
 	$(PY3) -m pylint $(SRC)
 
