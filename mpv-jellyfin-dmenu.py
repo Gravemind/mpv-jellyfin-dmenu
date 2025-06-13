@@ -439,7 +439,9 @@ def mpv_play_item(item):
         },
     )
     # Replace with fresh user data
-    assert set(res.keys()) == set(item["UserData"].keys())
+    a, b = (set(res.keys()), set(item["UserData"].keys()))
+    if a != b:
+        info("(debug: unexpected user data keys ? {a!r} {b!r})")
     item["UserData"] = res
 
     url = AUTH_CONFIG.url + f"/Videos/{item['Id']}/stream?static=true"
