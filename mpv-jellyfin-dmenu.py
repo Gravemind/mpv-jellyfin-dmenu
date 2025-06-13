@@ -60,9 +60,12 @@ DMENUS = [
 
 
 def make_parser():
+    default_auth_path = os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/auth.ini")
+    default_config_path = os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/config.ini")
+
     parser = argparse.ArgumentParser(
         description="Select jellyfin media with dmenu and play them with mpv",
-        epilog=f"Config example (see --config):\n{DEFAULT_CONFIG_INI}\n ",
+        epilog=f"Default config:\n{DEFAULT_CONFIG_INI}\n ",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -70,12 +73,12 @@ def make_parser():
     )
     parser.add_argument(
         "--auth-config",
-        default=os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/auth.ini"),
+        default=default_auth_path,
         help="Generated authentication data (%(default)s).",
     )
     parser.add_argument(
         "--config",
-        default=os.path.join(CONFIG_DIR, "mpv-jellyfin-dmenu/config.ini"),
+        default=default_config_path,
         help="Config file (%(default)s).",
     )
     avail = " or ".join(next(zip(*DMENUS)))

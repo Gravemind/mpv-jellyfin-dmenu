@@ -17,11 +17,22 @@ Then you are ready to run:
 $ mpv-jellyfin-dmenu
 ```
 
-### Use dmenu alternatives
+### Configuration
+
+The configuration is located at `~/.config/mpv-jellyfin-dmenu/config.ini`.
+
+Default configuration values can be seen from `--help`:
 
 ```console
-$ export DMENU="rofi -dmenu -i"
-$ mpv-jellyfin-dmenu
+$ mpv-jellyfin-dmenu --help
+```
+
+#### dmenu alternative command
+
+```ini
+# ~/.config/mpv-jellyfin-dmenu/config.ini
+[mpv-jellyfin-dmenu]
+dmenu_command = rofi -dmenu -i
 ```
 
 [Jellyfin]: https://jellyfin.org/
