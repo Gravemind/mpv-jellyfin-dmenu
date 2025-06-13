@@ -451,6 +451,9 @@ class MpvWatcher:
         try:
             next(self.loop_gen_it)
             return True
+        except ConnectionResetError as e:
+            info(f"mpv connection closed: {e}")
+            return False
         except StopIteration:
             return False
 
