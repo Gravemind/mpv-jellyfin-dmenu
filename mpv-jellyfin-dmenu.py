@@ -460,7 +460,7 @@ class MpvWatcher:
         next_pb_update = now + self.interval
         next_yield = now + self.interval
         while True:
-            r, _, x = select.select(fds, (), fds, max(0, now - min(next_pb_update, next_yield)))
+            r, _, x = select.select(fds, (), fds, max(0, min(next_pb_update, next_yield) - now))
             if x:
                 return
 
