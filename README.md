@@ -1,7 +1,31 @@
 # mpv Jellyfin dmenu
 
-A simple [Jellyfin] media selection program using [rofi], [wofi], or
-[dmenu]. Launches [mpv] and reports playback progress to Jellyfin while playing.
+A simple [Jellyfin] media browser using [dmenu] or alternative ([rofi] [wofi]
+etc.). Opens [mpv] to play videos.
+
+- Browse "Continue Watching", "Next-up", "Latest", and "Collections"
+
+- Resume playback position and report watch progress to Jellyfin
+
+- No server-side transcoding (thanks to mpv)
+
+Other characteristics:
+
+- Uses Jellyfin Quick Connect to authenticate the first time
+
+- Launches *your* mpv with minimal interference
+
+- Can use [dmenu alternatives][alt] (see `--help`)
+
+- Follows [Jellyfin watched/resume rules][rules], *or not* (see `--help`)
+
+[Jellyfin]: https://jellyfin.org/
+[mpv]: https://mpv.io/
+[dmenu]: https://tools.suckless.org/dmenu
+[rofi]: https://davatorium.github.io/rofi
+[wofi]: https://hg.sr.ht/~scoopta/wofi
+[alt]: #dmenu-alternative-command
+[rules]: https://jellyfin.josmind.com/web/#/dashboard/playback/resume
 
 ## Installation
 
@@ -44,12 +68,6 @@ $ mpv-jellyfin-dmenu --help
 dmenu_command = rofi -dmenu -i
 ```
 
-[Jellyfin]: https://jellyfin.org/
-[mpv]: https://mpv.io/
-[dmenu]: https://tools.suckless.org/dmenu
-[rofi]: https://davatorium.github.io/rofi
-[wofi]: https://hg.sr.ht/~scoopta/wofi
-
 ## Development
 
 ```sh
@@ -70,7 +88,8 @@ make
 
 ## Yet another mpv Jellyfin
 
+- https://jellyfin.org/downloads/clients/
 - https://github.com/EmperorPenguin18/mpv-jellyfin
-- https://github.com/jellyfin/jellyfin-mpv-shim/tree/master/jellyfin_mpv_shim
+- https://github.com/jellyfin/jellyfin-mpv-shim
 - https://github.com/nonomal/jellyfin-desktop
 - https://github.com/Aanok/jftui
