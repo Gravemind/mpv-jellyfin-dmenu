@@ -5,6 +5,9 @@ A simple [Jellyfin] media selection program using [rofi], [wofi], or
 
 ## Installation
 
+Dependencies: `python3`, `mpv`, `dmenu` (or `rofi`, `wofi`, etc.), optional python module
+`platformdirs`.
+
 You can use `./mpv-jellyfin-dmenu` directly.
 
 You can copy or symlink `mpv-jellyfin-dmenu` somewhere in your `$PATH` (`~/.local/bin`).
