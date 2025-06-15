@@ -34,7 +34,7 @@ DEFAULT_CONFIG_INI = """
 [mpv-jellyfin-dmenu]
 dmenu_command =
 
-# https://jellyfin.josmind.com/web/#/dashboard/playback/resume
+# Jellyfin > Dashboard > Playback > Resume
 jellyfin_watched_rules = true
 
 # Interval between playback position reporting
@@ -97,7 +97,7 @@ def make_parser():
         action="store_true",
         default=None,
         help="Follow jellyfin rules to mark as watched/progress.\n"
-        "See https://jellyfin.josmind.com/web/#/dashboard/playback/resume",
+        "See Jellyfin > Dashboard > Playback > Resume",
     )
     parser.add_argument(
         "--ask-watched",
@@ -588,7 +588,6 @@ def mpv_play_item(item):
     info("")
 
     # Get jellyfin watched/resume rules
-    # https://jellyfin.josmind.com/web/#/dashboard/playback/resume
     if GLOBAL.jellyfin_watched_rules:
         # Late fetch to get latest config
         res = jellyfin_get("System/Configuration", {}, {})

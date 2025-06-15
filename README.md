@@ -81,7 +81,7 @@ make
 - Add the total number of episode in the season in shows titles
 - Add mpv args configuration
 - Collection Folder sort order
-- Maybe follow [Jellyfin's Home](https://jellyfin.josmind.com/web/#/mypreferenceshome.html) [display preference](https://api.jellyfin.org/#tag/DisplayPreferences) ?
+- Maybe follow Jellyfin's Home [display preference](https://api.jellyfin.org/#tag/DisplayPreferences) ?
 - Allow other players (VLC ? is there a VLC IPC remote control ?)
 - write more tests
 
