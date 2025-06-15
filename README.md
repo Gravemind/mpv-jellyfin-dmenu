@@ -17,7 +17,7 @@ Other characteristics:
 
 - Can use [dmenu alternatives][alt] (see `--help`)
 
-- Follows [Jellyfin watched/resume rules][rules], *or not* (see `--help`)
+- Follows Jellyfin watched rules (Jellyfin > Dashboard > Playback > Resume), *or not* (see `--help`)
 
 [Jellyfin]: https://jellyfin.org/
 [mpv]: https://mpv.io/
@@ -25,7 +25,6 @@ Other characteristics:
 [rofi]: https://davatorium.github.io/rofi
 [wofi]: https://hg.sr.ht/~scoopta/wofi
 [alt]: #dmenu-alternative-command
-[rules]: https://jellyfin.josmind.com/web/#/dashboard/playback/resume
 
 ## Installation
 
