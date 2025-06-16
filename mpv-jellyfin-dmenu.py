@@ -484,7 +484,9 @@ class MpvWatcher:
                 for msg, data in json_load_multiple(data):
                     debug("recv from mpv:", msg)
                     if msg.get("request_id") == pb_req_id:
-                        self.playback_pct = msg.get("data")
+                        msg_data = msg.get("data")
+                        if msg_data is not None:
+                            self.playback_pct = msg_data
                         next_pb_update = now + self.interval
                     elif msg.get("event") in ["seek"]:
                         # "seek" event is when seeking begins
