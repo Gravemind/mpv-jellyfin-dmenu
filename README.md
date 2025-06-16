@@ -79,7 +79,6 @@ make
 - Add option to quit after watching for movies or shows
 - Use dmenu for authentication instead of terminal
 - Add the total number of episode in the season in shows titles
-- Add mpv args configuration
 - Collection Folder sort order
 - Maybe follow Jellyfin's Home [display preference](https://api.jellyfin.org/#tag/DisplayPreferences) ?
 - Allow other players (VLC ? is there a VLC IPC remote control ?)

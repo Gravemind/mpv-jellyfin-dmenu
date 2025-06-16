@@ -32,6 +32,8 @@ except ImportError:
 
 DEFAULT_CONFIG_INI = """
 [mpv-jellyfin-dmenu]
+
+# Alternative dmenu command. Leave empty to auto select.
 dmenu_command =
 
 # Jellyfin > Dashboard > Playback > Resume
@@ -39,6 +41,12 @@ jellyfin_watched_rules = true
 
 # Interval between playback position reporting
 playback_report_interval = 4.0
+
+# MPV command line argument. For example:
+#   Open window immediately: --force-window=immediate
+#   Keep window open after end of video: --idle=yes
+#   Start fullscreen: --fullscreen
+mpv_args = --force-window=immediate
 
 icon_watched = ✅
 icon_not_watched = ❎
@@ -75,7 +83,10 @@ def make_parser():
 
     parser = argparse.ArgumentParser(
         description="Select jellyfin media with dmenu and play them with mpv",
-        epilog=f"Default config:\n\n```ini{DEFAULT_CONFIG_INI}```\n ",
+        epilog=(
+            f"Default config values (when not specified in {default_config_path}):\n\n"
+            f"```ini{DEFAULT_CONFIG_INI}```\n "
+        ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
@@ -694,7 +705,10 @@ def main():
             fatal(f"Could not find a suitable $DMENUS or {avail}.")
     GLOBAL.dmenu_cmd = dmenu_cmd
 
-    GLOBAL.mpv_args = opts.mpv_args
+    if opts.mpv_args:
+        GLOBAL.mpv_args = opts.mpv_args
+    else:
+        GLOBAL.mpv_args = shlex.split(CONFIG.mpv_args)
 
     # --auth options
     if opts.auth:
