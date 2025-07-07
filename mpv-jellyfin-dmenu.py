@@ -51,6 +51,8 @@ mpv_args = --force-window=immediate
 icon_watched = ✅
 icon_not_watched = ❎
 icon_in_progress = ⏳
+icon_missing = ❌
+icon_unaired = 🛬
 icon_continue = ▶️
 icon_play_next = ⏭️️
 icon_parent_folder = 🔙
@@ -329,8 +331,14 @@ def item_title(item, menu=True):
             icon = CONFIG.icon_video
         else:
             icon = f"[{typ}]"
-
         title.append(icon)
+
+        if item.get("LocationType") == "Virtual":
+            air_date = item.get("PremiereDate")
+            if air_date and parse_iso(air_date) > utc_now():
+                title.append(CONFIG.icon_unaired)
+            else:
+                title.append(CONFIG.icon_missing)
 
         ud = item.get("UserData", {})
         watched = ud.get("Played", False)
@@ -541,11 +549,22 @@ def watched_mpv(url, title, playback_pct, interval):
     watcher.returncode = proc.returncode
 
 
+def utc_now():
+    return datetime.datetime.now(datetime.UTC)
+
+
 def now_iso():
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_iso(string):
+    return datetime.datetime.fromisoformat(string)
 
 
 def mpv_play_item(item):
+    if item.get("LocationType") == "Virtual":
+        info("Cannot play missing item.")
+        return
 
     # Should we get a fresh playcount ?
     play_count = item["UserData"]["PlayCount"]
