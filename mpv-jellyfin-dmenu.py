@@ -125,7 +125,7 @@ def make_parser():
         "--dmenu",
         help=f"The dmenu command.\ndefault: $DMENU or {avail}",
     )
-    parser.add_argument("--debug", action="store_true", help="Debug print.")
+    parser.add_argument("--debug", action="count", default=0, help="Debug print.")
     parser.add_argument("mpv_args", nargs="*", help="Additional mpv arguments")
 
     return parser
@@ -202,7 +202,10 @@ def jellyfin_api(method, uri, query=None, data=None):
         headers["Content-type"] = "application/json;charset=utf-8"
 
     if GLOBAL.debug:
-        debug("jellyfin_api REQ", method, url, json.dumps(headers), json.dumps(data))
+        debug("jellyfin_api REQ", method, url)
+        if GLOBAL.debug > 1:
+            debug("jellyfin_api ... HEADERS", json.dumps(headers))
+            debug("jellyfin_api ... DATA", json.dumps(data))
 
     token = AUTH_CONFIG.token
     if token:
@@ -217,8 +220,8 @@ def jellyfin_api(method, uri, query=None, data=None):
 
     with urllib.request.urlopen(req) as f:
         resp = json.load(f)
-        if GLOBAL.debug:
-            debug("jellyfin_api RESP", json.dumps(resp))
+        if GLOBAL.debug > 1:
+            debug("jellyfin_api ... RESP", json.dumps(resp))
         return resp
 
 
@@ -490,7 +493,7 @@ class MpvWatcher:
                     return
                 data += recv
                 for msg, data in json_load_multiple(data):
-                    debug("recv from mpv:", msg)
+                    debug("recv msg from mpv:", msg)
                     if msg.get("request_id") == pb_req_id:
                         msg_data = msg.get("data")
                         if msg_data is not None:
@@ -501,13 +504,14 @@ class MpvWatcher:
                         # "playback-restart" event is when playback restarts after seek
                         next_pb_update = now + fast_delay
                 if data:
-                    debug("partial recv:", data)
+                    debug("recv partial msg from mpv:", data)
 
             if now >= next_yield:
                 next_yield = now + self.interval
                 yield
 
             if now >= next_pb_update:
+                debug("send msg to mpv:", pb_cmd)
                 self.fd.sendall(pb_cmd)  # blocks
                 now = time.monotonic()
                 next_pb_update = now + self.interval
@@ -538,6 +542,8 @@ def watched_mpv(url, title, playback_pct, interval, subtitles):
     mpv_cmd.append("--")
     mpv_cmd.append(url)
 
+    info("running mpv command:", shlex.join(mpv_cmd))
+
     watcher = MpvWatcher(myfd, playback_pct=playback_pct, interval=interval)
     with subprocess.Popen(mpv_cmd, pass_fds=(mpvfd.fileno(),)) as proc:
         mpvfd.close()
@@ -546,6 +552,8 @@ def watched_mpv(url, title, playback_pct, interval, subtitles):
         except Exception as e:
             error(e, "... waiting for mpv to quit")
             raise
+
+    info("mpv exited")
 
     myfd.close()
     watcher.returncode = proc.returncode
@@ -671,7 +679,7 @@ def mpv_play_item(item):
         ]
         ans = dmenu_ask(f"Mark: {title}", "\n".join(menu))
         if ans is None:
-            fatal("abort.")
+            fatal("aborted.")
         ansid = menu.index(ans)
         if ansid == 0:
             played = False
@@ -714,7 +722,7 @@ def dmenu_ask(prompt, stdin):
 
 
 def main():
-    GLOBAL.debug = False
+    GLOBAL.debug = 0
 
     parser = make_parser()
     opts = parser.parse_args()
@@ -861,7 +869,7 @@ def main():
 
         ans = dmenu_ask("mpv-jellyfin-dmenu", "\n".join(lines))
         if ans is None:
-            fatal("abort.")
+            fatal("aborted.")
 
         i = lines.index(ans)
         item = lines_item[i]
