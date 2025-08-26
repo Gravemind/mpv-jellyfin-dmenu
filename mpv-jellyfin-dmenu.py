@@ -42,10 +42,11 @@ jellyfin_watched_rules = true
 # Interval between playback position reporting
 playback_report_interval = 4.0
 
-# MPV command line argument. For example:
+# MPV command line. For example:
 #   Open window immediately: --force-window=immediate
 #   Keep window open after end of video: --idle=yes
 #   Start fullscreen: --fullscreen
+mpv = mpv
 mpv_args = --force-window=immediate
 
 icon_watched = ✅
@@ -119,6 +120,7 @@ def make_parser():
         default=None,
         help="Disable --jellyfin-watched-rules: ask watched/played state after playing.",
     )
+    parser.add_argument("--mpv", help="The mpv executable")
     avail = " or ".join(next(zip(*DMENUS)))
     parser.add_argument(
         "-d",
@@ -529,9 +531,11 @@ class MpvWatcher:
 
 @contextmanager
 def watched_mpv(url, title, playback_pct, interval, subtitles):
-    myfd, mpvfd = socket.socketpair()
+    mpv_cmd = GLOBAL.mpv
 
-    mpv_cmd = ["mpv", f"--input-ipc-client=fd://{mpvfd.fileno()}"]
+    myfd, mpvfd = socket.socketpair()
+    mpv_cmd.append(f"--input-ipc-client=fd://{mpvfd.fileno()}")
+
     if playback_pct:
         info(f"Resuming video at {playback_pct:.2f}%")
         mpv_cmd.append(f"--start={playback_pct:.2f}%")
@@ -754,6 +758,8 @@ def main():
             avail = " or ".join(next(zip(*DMENUS)))
             fatal(f"Could not find a suitable $DMENUS or {avail}.")
     GLOBAL.dmenu_cmd = dmenu_cmd
+
+    GLOBAL.mpv = shlex.split(opts.mpv or CONFIG.mpv)
 
     if opts.mpv_args:
         GLOBAL.mpv_args = opts.mpv_args
