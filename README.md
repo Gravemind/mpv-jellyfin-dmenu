@@ -19,6 +19,8 @@ Other characteristics:
 
 - Follows Jellyfin watched rules (Jellyfin > Dashboard > Playback > Resume), *or not* (see `--help`)
 
+- External subtitles (experimental)
+
 [Jellyfin]: https://jellyfin.org/
 [mpv]: https://mpv.io/
 [dmenu]: https://tools.suckless.org/dmenu

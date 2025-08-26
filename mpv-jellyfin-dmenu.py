@@ -524,7 +524,7 @@ class MpvWatcher:
 
 
 @contextmanager
-def watched_mpv(url, title, playback_pct, interval):
+def watched_mpv(url, title, playback_pct, interval, subtitles):
     myfd, mpvfd = socket.socketpair()
 
     mpv_cmd = ["mpv", f"--input-ipc-client=fd://{mpvfd.fileno()}"]
@@ -533,6 +533,8 @@ def watched_mpv(url, title, playback_pct, interval):
         mpv_cmd.append(f"--start={playback_pct:.2f}%")
     mpv_cmd.append("--force-media-title=" + title)
     mpv_cmd.extend(GLOBAL.mpv_args)
+    for sub in subtitles:
+        mpv_cmd.append("--sub-file=" + sub)
     mpv_cmd.append("--")
     mpv_cmd.append(url)
 
@@ -586,6 +588,24 @@ def mpv_play_item(item):
     runtime_ticks = item["RunTimeTicks"]
     played = ud["Played"]
 
+    subtitles = []
+    source = item["MediaSources"][0]
+    for stream in source["MediaStreams"]:
+        if stream["Type"] != "Subtitle":
+            continue
+        if not stream["IsExternal"]:
+            continue
+        if not stream["IsTextSubtitleStream"]:
+            continue
+        suburl = (
+            AUTH_CONFIG.url
+            + f"/Videos/{item['Id']}/{source['Id']}/Subtitles/{stream['Index']}/"
+            # `_name` is a hack to display subtitle name in mpv
+            + f"Stream.srt?_name={stream['DisplayTitle']}"
+        )
+        subtitles.append(suburl)
+        debug(f"Found external subtitle {stream['DisplayTitle']!r}: {suburl}")
+
     def ticks_to_pct(ticks):
         return 100.0 * (float(ticks) / float(runtime_ticks))
 
@@ -596,6 +616,7 @@ def mpv_play_item(item):
 
     with watched_mpv(
         url=url,
+        subtitles=subtitles,
         title=title + " (mpv-jellyfin-dmenu)",
         playback_pct=playback_pct,
         interval=GLOBAL.playback_report_interval,
@@ -787,6 +808,7 @@ def main():
             item_id = item.get("Id", None)
             if item_id is not None and item_id in lines_id:
                 return
+            assert item.get("MediaType") != "Video" or item.get("MediaSources")
             lines_id.add(item_id)
             title = (prefix or "") + item_title(item).strip()
             lines.append(title)
@@ -795,19 +817,22 @@ def main():
         def push_items(items, prefix=None):
             list(map(partial(push_item, prefix=prefix), items))
 
+        # fields = "MediaStreams,MediaSources"
+        fields = "MediaSources"
+
         if next_item is None:
             # Root menu
 
             # Continue watching
-            resumes = jellyfin_get("UserItems/Resume", {"mediaTypes": "Video"})
+            resumes = jellyfin_get("UserItems/Resume", {"mediaTypes": "Video", "fields": fields})
             push_items(resumes["Items"], prefix=f"{CONFIG.icon_continue} ")
 
             # Next-up
-            nexts = jellyfin_get("Shows/NextUp", {"mediaTypes": "Video"})
+            nexts = jellyfin_get("Shows/NextUp", {"mediaTypes": "Video", "fields": fields})
             push_items(nexts["Items"], prefix=f"{CONFIG.icon_play_next} ")
 
             # Root folders and their latest items
-            roots = jellyfin_get("UserViews", {"userId": GLOBAL.user_id})
+            roots = jellyfin_get("UserViews", {"userId": GLOBAL.user_id, "fields": fields})
             for root in roots["Items"]:
                 push_item(root)
                 latests = jellyfin_get(
@@ -816,6 +841,7 @@ def main():
                         "mediaTypes": "Video",
                         "parentId": root["Id"],
                         "userId": GLOBAL.user_id,
+                        "fields": fields,
                         # "limit": 5,  # Bug ? responds with less results than asked.
                     },
                 )
@@ -828,7 +854,9 @@ def main():
             push_item({"Name": "..", "Type": "ParentFolder"})
 
             # Folder items
-            its = jellyfin_get("Items", {"userId": GLOBAL.user_id, "parentId": next_item["Id"]})
+            its = jellyfin_get(
+                "Items", {"userId": GLOBAL.user_id, "parentId": next_item["Id"], "fields": fields}
+            )
             push_items(its["Items"])
 
         ans = dmenu_ask("mpv-jellyfin-dmenu", "\n".join(lines))
