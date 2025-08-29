@@ -560,7 +560,7 @@ class MpvWatcher:
 
 @contextmanager
 def watched_mpv(url, title, playback_pct, interval, subtitles):
-    mpv_cmd = GLOBAL.mpv
+    mpv_cmd = list(GLOBAL.mpv)
 
     myfd, mpvfd = socket.socketpair()
     mpv_cmd.append(f"--input-ipc-client=fd://{mpvfd.fileno()}")
