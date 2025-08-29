@@ -17,7 +17,7 @@ import shlex
 import secrets
 import time
 from contextlib import contextmanager
-from functools import partial
+from functools import partial, lru_cache
 from textwrap import dedent
 from types import SimpleNamespace
 
@@ -41,6 +41,9 @@ jellyfin_watched_rules = true
 
 # Interval between playback position reporting
 playback_report_interval = 4.0
+
+# Show total number of episode in season in episode name.
+show_episode_count = true
 
 # MPV command line. For example:
 #   Open window immediately: --force-window=immediate
@@ -318,12 +321,32 @@ def item_played_percent(item):
     return None
 
 
+@lru_cache(maxsize=None)
+def get_season_episode_count(seasonId):
+    season = jellyfin_get("Items", {"userId": GLOBAL.user_id, "parentId": seasonId})
+    avail = 0
+    virtual = 0
+    if len(season["Items"]) != season["TotalRecordCount"]:
+        error("Pagination unsupported")
+    for item in season["Items"]:
+        if item.get("SeasonId") != seasonId:
+            # Ignore special episodes
+            continue
+        if item.get("LocationType") == "Virtual":
+            virtual += 1
+        else:
+            avail += 1
+    if virtual:
+        return f"{avail}+{virtual}"
+    return f"{avail}"
+
+
 def item_title(item, menu=True):
     title = []
 
-    if menu:
-        typ = item["Type"]
+    typ = item["Type"]
 
+    if menu:
         if typ == "ParentFolder":
             icon = CONFIG.icon_parent_folder
         elif typ == "CollectionFolder":
@@ -366,7 +389,11 @@ def item_title(item, menu=True):
         e = item.get("IndexNumber", None)
         s = item.get("ParentIndexNumber", None)
         if s is not None and e is not None:
-            title.append(f"S{s:>02}E{e:>02}")
+            ep = f"S{s:>02}E{e:>02}"
+            if GLOBAL.show_episode_count and "SeasonId" in item:
+                ep_count = get_season_episode_count(item["SeasonId"])
+                ep += f"/{ep_count}"
+            title.append(ep)
 
         title.append("-")
 
@@ -743,6 +770,8 @@ def main():
         GLOBAL.jellyfin_watched_rules = opts.jellyfin_watched_rules
     else:
         GLOBAL.jellyfin_watched_rules = is_yes(CONFIG.jellyfin_watched_rules)
+
+    GLOBAL.show_episode_count = is_yes(CONFIG.show_episode_count)
 
     AUTH_CONFIG.set_path(opts.auth_config)
     AUTH_CONFIG.read()
