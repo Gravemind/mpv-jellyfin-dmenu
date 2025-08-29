@@ -77,7 +77,9 @@ DMENUS = [
     ["dmenu", "-i"],
 ]
 
-YESES = ["true", "yes", "1", "on"]
+
+def is_yes(s):
+    return s.strip().lower() in ["true", "yes", "1", "on"]
 
 
 def make_parser():
@@ -740,7 +742,7 @@ def main():
     if opts.jellyfin_watched_rules is not None:
         GLOBAL.jellyfin_watched_rules = opts.jellyfin_watched_rules
     else:
-        GLOBAL.jellyfin_watched_rules = CONFIG.jellyfin_watched_rules.lower().strip() in YESES
+        GLOBAL.jellyfin_watched_rules = is_yes(CONFIG.jellyfin_watched_rules)
 
     AUTH_CONFIG.set_path(opts.auth_config)
     AUTH_CONFIG.read()
